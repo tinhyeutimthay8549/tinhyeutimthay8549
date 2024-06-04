@@ -1,154 +1,42 @@
-# RollingTextView
+# Rabit: Reliable Allreduce and Broadcast Interface
+[![Build Status](https://travis-ci.org/dmlc/rabit.svg?branch=master)](https://travis-ci.org/dmlc/rabit)
+[![Documentation Status](https://readthedocs.org/projects/rabit/badge/?version=latest)](http://rabit.readthedocs.org/)
 
----
+## Recent developments of Rabit have been moved into [dmlc/xgboost](https://github.com/dmlc/xgboost). See discussion in [dmlc/xgboost#5995](https://github.com/dmlc/xgboost/issues/5995).
 
-![preview][1]
+rabit is a light weight library that provides a fault tolerant interface of Allreduce and Broadcast. It is designed to support easy implementations of distributed machine learning programs, many of which fall naturally under the Allreduce abstraction. The goal of rabit is to support ***portable*** , ***scalable*** and ***reliable*** distributed machine learning programs.
 
-[![](https://jitpack.io/v/YvesCheung/RollingText.svg)](https://jitpack.io/#YvesCheung/RollingText)
-[![Maven Central](https://img.shields.io/maven-central/v/io.github.yvescheung/RollingText.svg?label=Maven%20Central)](https://search.maven.org/search?q=g:%22io.github.yvescheung%22%20AND%20a:%RollingText%22)
+* [Tutorial](guide)
+* [API Documentation](http://homes.cs.washington.edu/~tqchen/rabit/doc)
+* You can also directly read the [interface header](include/rabit.h)
+* [XGBoost](https://github.com/dmlc/xgboost)
+  - Rabit is one of the backbone library to support distributed XGBoost
 
-[中文版README](README_CN.md)
+## Features
+All these features comes from the facts about small rabbit:)
+* Portable: rabit is light weight and runs everywhere
+  - Rabit is a library instead of a framework, a program only needs to link the library to run
+  - Rabit only replies on a mechanism to start program, which was provided by most framework
+  - You can run rabit programs on many platforms, including Yarn(Hadoop), MPI using the same code
+* Scalable and Flexible: rabit runs fast
+  * Rabit program use Allreduce to communicate, and do not suffer the cost between iterations of MapReduce abstraction.
+  - Programs can call rabit functions in any order, as opposed to frameworks where callbacks are offered and called by the framework, i.e. inversion of control principle.
+  - Programs persist over all the iterations, unless they fail and recover.
+* Reliable: rabit dig burrows to avoid disasters
+  - Rabit programs can recover the model and results using synchronous function calls.
+  - Rabit programs can set rabit_boostrap_cache=1 to support allreduce/broadcast operations before loadcheckpoint
+  `
+    rabit::Init(); -> rabit::AllReduce(); -> rabit::loadCheckpoint(); -> for () { rabit::AllReduce(); rabit::Checkpoint();} -> rabit::Shutdown();
+  `
 
-Features
-========
+## Use Rabit
+* Type make in the root folder will compile the rabit library in lib folder
+* Add lib to the library path and include to the include path of compiler
+* Languages: You can use rabit in C++ and python
+  - It is also possible to port the library to other languages
 
-- easy to use, API is similar to TextView, and the setText method can be animated with up and down rolling
-
-- support XML to set up common properties such as android:textSize/ android:textColor/ android:textStyle
-
-- highly customizable to support animation effects of any single character
-
-Animation
-========
-
-### Strategy
-
-Different rolling effects can be achieved by setting different animation strategies
-
-> The default animation is to roll down when small characters change to large characters, and vice versa.
->
-> You can also specify that rolling to the same direction
->
-> The carry animation can be worked from low digit to high digit, not only for decimal. But it can only be used for strings with a length less than 10 to prevent integer from overflow. It can only be used for a sequence of characters containing 0, otherwise the calculation of the carry will be meaningless.
-
-![StrategyCompare][2]
-
-### The order of characters
-
-- The sequence of characters needs to be set up to tell ``RollingTextView`` how to change from the original character to the target character
-- The common sequence of characters can be found in the ``CharOrder`` constant class
-- When multiple orders are added and all are applicable to the target character and the original character, the precedence of the previous setting will be higher
-
-```java
-alphaBetView.addCharOrder(CharOrder.Alphabet);
-alphaBetView.addCharOrder(CharOrder.UpperAlphabet);
-alphaBetView.addCharOrder(CharOrder.Number);
-alphaBetView.addCharOrder(CharOrder.Hex);
-alphaBetView.addCharOrder(CharOrder.Binary);
-```
-
-![charOrderCompare][3]
-
-### Rolling fluency
-
-> The fluency of the animation can be adjusted by passing a ``factor`` parameter. The closer the ``factor`` value is to 0, the rolling will appear to be more hopping. And the closer the ``factor`` value is to 1, the more smooth the rolling is.
-
-![stickyFactor][4]
-
-### other
-
-More ideas can be implemented on the ``CharOrderStrategy`` interface to customize your own animation effects
-
-Download
-========
-
-```groovy
-allprojects {
-    repositories {
-        maven { url 'https://jitpack.io' }
-    }
-}
-
-dependencies {  
-    implementation "com.github.YvesCheung.RollingText:RollingText:x.y.z"
-}
-```
-    
-> x.y.z replace with [![](https://jitpack.io/v/YvesCheung/RollingText.svg)](https://jitpack.io/#YvesCheung/RollingText)
-
-Usage
-=========
-
-### XML settings
-
-```xml
-<com.yy.mobile.rollingtextview.RollingTextView
-    android:id="@+id/alphaBetView"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:text="i am text"
-    android:textSize="25sp" 
-    android:textColor="#1d1d1d"
-    android:textStyle="bold"
-    android:gravity="center"
-    android:shadowColor="#ff44ffdd"
-    android:shadowDx="10"
-    android:shadowDy="10"
-    android:shadowRadius="10"/>
-```
-
-### write in java code
-
-```java
-final RollingTextView rollingTextView = findViewById(R.id.alphaBetView);
-rollingTextView.setAnimationDuration(2000L);
-rollingTextView.setCharStrategy(Strategy.NormalAnimation);
-rollingTextView.addCharOrder(CharOrder.Alphabet);
-rollingTextView.setAnimationInterpolator(new AccelerateDecelerateInterpolator());
-rollingTextView.addAnimatorListener(new AnimatorListenerAdapter() {
-    @Override
-    public void onAnimationEnd(Animator animation) {
-        //finsih
-    }
-});
-rollingTextView.setText("i am a text");
-```
-
-Debug
-========
-
-Using [Uinspector](https://github.com/YvesCheung/UInspector), You can debug the properties of `RollingTextView`:
-
-![debug preview](https://raw.githubusercontent.com/YvesCheung/RollingText/master/rollingtextviewinspector/debug.gif)
-
-Add `Uinspector` to your `build.gradle`:
-
-```groovy
-dependencies {
-    // debugImplementation because Inspector should only run in debug builds.
-    debugImplementation "com.github.YvesCheung.RollingText:RollingTextInspector:x.y.z"
-}
-```
-
-License
-========
-
-	Copyright 2018 Yves Cheung
-	
-   	Licensed under the Apache License, Version 2.0 (the "License");
-   	you may not use this file except in compliance with the License.
-   	You may obtain a copy of the License at
-
-       	http://www.apache.org/licenses/LICENSE-2.0
-
-   	Unless required by applicable law or agreed to in writing, software
-   	distributed under the License is distributed on an "AS IS" BASIS,
-   	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   	See the License for the specific language governing permissions and
-   	limitations under the License.
-
-
-  [1]: https://raw.githubusercontent.com/YvesCheung/RollingText/master/ezgif.com-optimize.gif
-  [2]: https://raw.githubusercontent.com/YvesCheung/RollingText/master/StrategyCompare.gif
-  [3]: https://raw.githubusercontent.com/YvesCheung/RollingText/master/charOrderCompare.gif
-  [4]: https://raw.githubusercontent.com/YvesCheung/RollingText/master/stickyFactor.gif
+## Contributing
+Rabit is an open-source library, contributions are welcomed, including:
+* The rabit core library.
+* Customized tracker script for new platforms and interface of new languages.
+* Tutorial and examples about the library.
