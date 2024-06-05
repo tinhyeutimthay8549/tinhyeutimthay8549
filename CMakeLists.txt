@@ -1,182 +1,367 @@
-cmake_minimum_required(VERSION 3.3)
+#
+# Setup
+#
 
-project(rabit VERSION 0.3.0 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.10.0)
 
-if ((${CMAKE_VERSION} VERSION_GREATER 3.13) OR (${CMAKE_VERSION} VERSION_EQUAL 3.13))
-  # This allows user to specify `RABIT_BUILD_DMLC` and others as CMake variable.
-  cmake_policy(SET CMP0077 NEW)
-endif ((${CMAKE_VERSION} VERSION_GREATER 3.13) OR (${CMAKE_VERSION} VERSION_EQUAL 3.13))
+# Internal cmake modules
+set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules)
 
-option(RABIT_BUILD_TESTS "Build rabit tests" OFF)
-option(RABIT_BUILD_MPI "Build MPI" OFF)
-option(RABIT_BUILD_DMLC "Include DMLC_CORE in build" OFF)
-option(RABIT_WITH_R_LIB "Fit the strict environment of R" OFF)
+include(CheckIncludeFiles)
+include(CheckFunctionExists)
+include(CheckLibraryExists)
+include(CheckTypeSize)
+include(CheckCSourceCompiles)
+include(CheckCXXSourceCompiles)
+include(CheckCSourceRuns)
 
-option(DMLC_ROOT "Specify root of external dmlc core.")
-# by default point to xgboost/dmlc-core
-set(DMLC_ROOT ${CMAKE_CURRENT_LIST_DIR}/../dmlc-core)
+include(CMakeMacroLibtoolFile)
 
-# moved from xgboost build
-if(R_LIB OR MINGW OR WIN32)
-  add_library(rabit src/engine_empty.cc src/c_api.cc)
-  set(rabit_libs rabit)
-  set_target_properties(rabit
-          PROPERTIES CXX_STANDARD 11
-          CXX_STANDARD_REQUIRED ON
-          POSITION_INDEPENDENT_CODE ON)
-else()
-  find_package(Threads REQUIRED)
-  add_library(rabit_empty src/engine_empty.cc src/c_api.cc)
-  add_library(rabit_base src/allreduce_base.cc src/engine_base.cc src/c_api.cc)
+include(cmake/TargetLinkDirectories.cmake)
 
-  add_library(rabit src/allreduce_base.cc src/allreduce_robust.cc src/engine.cc src/c_api.cc)
-  add_library(rabit_mock_static src/allreduce_base.cc src/allreduce_robust.cc src/engine_mock.cc src/c_api.cc)
-  add_library(rabit_mock SHARED src/allreduce_base.cc src/allreduce_robust.cc src/engine_mock.cc src/c_api.cc)
-  target_link_libraries(rabit Threads::Threads)
-  target_link_libraries(rabit_mock_static Threads::Threads)
-  target_link_libraries(rabit_mock Threads::Threads)
+project(tigervnc)
+set(VERSION 1.13.80)
 
-  set(rabit_libs rabit rabit_base rabit_empty rabit_mock rabit_mock_static)
-  set_target_properties(rabit rabit_base rabit_empty rabit_mock rabit_mock_static
-    PROPERTIES CXX_STANDARD 11
-    CXX_STANDARD_REQUIRED ON
-    POSITION_INDEPENDENT_CODE ON)
-ENDIF(R_LIB OR MINGW OR WIN32)
+# The RC version must always be four comma-separated numbers
+string(REPLACE . , RCVERSION "${VERSION}.0")
 
-if(RABIT_BUILD_MPI)
-  find_package(MPI REQUIRED)
-  if (NOT MPI_CXX_FOUND)
-    message(FATAL_ERROR "CXX Interface for MPI is required for building MPI backend.")
-  endif (NOT MPI_CXX_FOUND)
-  add_library(rabit_mpi src/engine_mpi.cc ${MPI_INCLUDE_PATH})
-  target_link_libraries(rabit_mpi ${MPI_CXX_LIBRARIES})
-  list(APPEND rabit_libs rabit_mpi)
-endif()
-
-# place binaries and libraries according to GNU standards
+# Installation paths
 include(GNUInstallDirs)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR})
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR})
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR})
-
-# we use this to get code coverage
-if ((CMAKE_CONFIGURATION_TYPES STREQUAL "Debug") AND (CMAKE_CXX_COMPILER_ID MATCHES GNU))
-  foreach(lib ${rabit_libs})
-    target_compile_options(${lib}
-      -fprofile-arcs
-      -ftest-coverage)
-    endforeach()
-endif((CMAKE_CONFIGURATION_TYPES STREQUAL "Debug") AND (CMAKE_CXX_COMPILER_ID MATCHES GNU))
-
-if(RABIT_BUILD_DMLC)
-  set(DMLC_ROOT ${CMAKE_CURRENT_LIST_DIR}/dmlc-core)
+set(CMAKE_INSTALL_UNITDIR "lib/systemd/system" CACHE PATH "systemd unit files (lib/systemd/system)")
+if(IS_ABSOLUTE "${CMAKE_INSTALL_UNITDIR}")
+  set(CMAKE_INSTALL_FULL_UNITDIR "${CMAKE_INSTALL_UNITDIR}")
+else()
+  set(CMAKE_INSTALL_FULL_UNITDIR "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_UNITDIR}")
 endif()
 
-if(DMLC_ROOT)
-  message("DMLC_ROOT point to " ${DMLC_ROOT})
-endif(DMLC_ROOT)
+option(INSTALL_SYSTEMD_UNITS "Install TigerVNC systemd units" ON)
 
-foreach(lib ${rabit_libs})
-  target_include_directories(${lib} PUBLIC
-          "$<BUILD_INTERFACE:${rabit_SOURCE_DIR}/include>"
-          "$<BUILD_INTERFACE:${DMLC_ROOT}/include>")
-endforeach()
+if(MSVC)
+  message(FATAL_ERROR "TigerVNC cannot be built with Visual Studio.  Please use MinGW")
+endif()
 
-if (RABIT_BUILD_TESTS)
-  enable_testing()
-  add_subdirectory(${rabit_SOURCE_DIR}/test/cpp)
+if(NOT BUILD_TIMESTAMP)
+  STRING(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M" UTC)
+endif()
 
-  # rabit mock based integration tests
-  list(REMOVE_ITEM rabit_libs "rabit_mock_static") # remove here to avoid installing it
-  set(tests lazy_recover local_recover model_recover)
+# Default to optimised builds instead of debug ones. Our code has no bugs ;)
+# (CMake makes it fairly easy to toggle this back to Debug if needed)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
 
-  foreach(test ${tests})
-    add_executable(${test} test/${test}.cc)
-    target_link_libraries(${test} rabit_mock_static)
-    set_target_properties(${test}  PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED ON)
-    install(TARGETS ${test} DESTINATION test) # Why are we installing these??
-  endforeach()
+message(STATUS "CMAKE_BUILD_TYPE = ${CMAKE_BUILD_TYPE}")
 
-  if(RABIT_BUILD_MPI)
-    add_executable(speed_test_mpi test/speed_test.cc)
-    target_link_libraries(speed_test_mpi rabit_mpi)
-    install(TARGETS speed_test_mpi DESTINATION test)
+message(STATUS "VERSION = ${VERSION}")
+message(STATUS "BUILD_TIMESTAMP = ${BUILD_TIMESTAMP}")
+add_definitions(-DBUILD_TIMESTAMP="${BUILD_TIMESTAMP}")
+
+# We want to keep our asserts even in release builds so remove NDEBUG
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -UNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -UNDEBUG")
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} -UNDEBUG")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -UNDEBUG")
+set(CMAKE_C_FLAGS_MINSIZEREL "${CMAKE_C_FLAGS_MINSIZEREL} -UNDEBUG")
+set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -UNDEBUG")
+
+# But extra debug checks are still gated by this custom define
+IF(CMAKE_BUILD_TYPE MATCHES Debug)
+  add_definitions(-D_DEBUG)
+ENDIF()
+
+# Make sure we get a sane C version
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
+
+# Tell the compiler to be stringent
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Wformat=2 -Wvla")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wformat=2 -Wvla")
+# Make sure we catch these issues whilst developing
+IF(CMAKE_BUILD_TYPE MATCHES Debug)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
+ENDIF()
+# clang doesn't support format_arg, which breaks this warning
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-format-nonliteral -Wno-format-security")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-nonliteral -Wno-format-security")
+endif()
+
+option(ENABLE_ASAN "Enable address sanitizer support" OFF)
+if(ENABLE_ASAN AND NOT WIN32 AND NOT APPLE)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+endif()
+
+option(ENABLE_TSAN "Enable thread sanitizer support" OFF)
+if(ENABLE_TSAN AND NOT WIN32 AND NOT APPLE AND CMAKE_SIZEOF_VOID_P MATCHES 8)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=thread")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread")
+endif()
+
+if(NOT DEFINED BUILD_WINVNC)
+  set(BUILD_WINVNC 1)
+endif()
+
+# Minimum version is Windows 7
+if(WIN32)
+  add_definitions(-D_WIN32_WINNT=0x0601)
+endif()
+
+# Legacy macros (macOS 10.12 and older) conflict with our code
+if(APPLE)
+  add_definitions(-D__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0)
+endif()
+
+# X11 stuff. It's in a if() so that we can say REQUIRED
+if(UNIX AND NOT APPLE)
+  find_package(X11 REQUIRED)
+  if(X11_Xdamage_LIB)
+    add_definitions(-DHAVE_XDAMAGE)
   endif()
-endif (RABIT_BUILD_TESTS)
+  if(X11_Xfixes_LIB)
+    add_definitions(-DHAVE_XFIXES)
+  endif()
+  if(X11_Xrandr_LIB)
+    add_definitions(-DHAVE_XRANDR)
+  endif()
+  if(X11_XTest_LIB)
+    add_definitions(-DHAVE_XTEST)
+  endif()
+endif()
 
-# Installation (https://github.com/forexample/package-example) {
+# Check for zlib
+find_package(ZLIB REQUIRED)
 
-# Layout. This works for all platforms:
-#   * <prefix>/lib/cmake/<PROJECT-NAME>
-#   * <prefix>/lib/
-#   * <prefix>/include/
-set(CMAKE_INSTALL_PREFIX "${rabit_SOURCE_DIR}")
-set(config_install_dir "lib/cmake/${PROJECT_NAME}")
-set(include_install_dir "include")
+# Check for pixman
+find_package(Pixman REQUIRED)
 
-set(generated_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+# Check for gettext
+option(ENABLE_NLS "Enable translation of program messages" ON)
+if(ENABLE_NLS)
+  # Tools
+  find_package(Gettext)
 
-# Configuration
-set(version_config "${generated_dir}/${PROJECT_NAME}ConfigVersion.cmake")
-set(project_config "${generated_dir}/${PROJECT_NAME}Config.cmake")
-set(TARGETS_EXPORT_NAME "${PROJECT_NAME}Targets")
-set(namespace "${PROJECT_NAME}::")
+  # Gettext needs iconv
+  find_package(Iconv)
 
-# Include module with fuction 'write_basic_package_version_file'
-include(CMakePackageConfigHelpers)
+  if(ICONV_FOUND)
+    # Headers and libraries (copied from licq)
+    set(GETTEXT_FOUND FALSE)
 
-# Configure '<PROJECT-NAME>ConfigVersion.cmake'
-# Use:
-#   * PROJECT_VERSION
-write_basic_package_version_file(
-    "${version_config}" COMPATIBILITY SameMajorVersion
-)
+    find_path(GETTEXT_INCLUDE_DIR libintl.h)
+    if(GETTEXT_INCLUDE_DIR)
+      set(CMAKE_REQUIRED_LIBRARIES ${ICONV_LIBRARIES})
+      set(CMAKE_REQUIRED_FLAGS -fno-builtin-dgettext)
+      check_function_exists(dgettext LIBC_HAS_DGETTEXT)
+      if(LIBC_HAS_DGETTEXT)
+        set(GETTEXT_FOUND TRUE)
+      else()
+        find_library(LIBINTL_LIBRARY NAMES intl libintl)
+        if(LIBINTL_LIBRARY)
+          check_library_exists(${LIBINTL_LIBRARY} "dgettext" "" LIBINTL_HAS_DGETTEXT)
+          if(LIBINTL_HAS_DGETTEXT)
+            set(GETTEXT_LIBRARIES ${LIBINTL_LIBRARY} ${ICONV_LIBRARIES})
+            set(GETTEXT_FOUND TRUE)
+          endif()
+        endif()
+      endif()
+      set(CMAKE_REQUIRED_LIBRARIES)
+      set(CMAKE_REQUIRED_FLAGS)
+    endif()
+  endif()
 
-# Configure '<PROJECT-NAME>Config.cmake'
-# Use variables:
-#   * TARGETS_EXPORT_NAME
-#   * PROJECT_NAME
-configure_package_config_file(
-    "cmake/Config.cmake.in"
-    "${project_config}"
-    INSTALL_DESTINATION "${config_install_dir}"
-)
+  if(NOT GETTEXT_FOUND OR NOT ICONV_FOUND)
+    message(WARNING "Gettext NOT found.  Native Language Support disabled.")
+    set(ENABLE_NLS 0)
+  endif()
+endif()
 
-# Targets:
-#   * <prefix>/lib/librabit.a
-#   * <prefix>/lib/librabit_base
-#   * <prefix>/lib/librabit_empty
-#   * header location after install: <prefix>/include/rabit/rabit.h
-#   * headers can be included by C++ code `#include <rabit/rabit.h>`
-install(
-    TARGETS ${rabit_libs}
-    EXPORT "${TARGETS_EXPORT_NAME}"
-    LIBRARY DESTINATION "lib"
-    ARCHIVE DESTINATION "lib"
-    RUNTIME DESTINATION "bin"
-    INCLUDES DESTINATION "${include_install_dir}"
-)
+option(ENABLE_H264 "Enable H.264 RFB encoding" ON)
+if(ENABLE_H264)
+  if(WIN32)
+    add_definitions("-DHAVE_H264")
+    set(H264_LIBS "WIN")  # may be LIBAV in the future
+    set(H264_LIBRARIES ole32 mfplat mfuuid wmcodecdspuuid)
+  else()
+    find_package(Ffmpeg)
+    if (AVCODEC_FOUND AND AVUTIL_FOUND AND SWSCALE_FOUND)
+      set(H264_INCLUDE_DIRS ${AVCODEC_INCLUDE_DIRS} ${AVUTIL_INCLUDE_DIRS} ${SWSCALE_INCLUDE_DIRS})
+      set(H264_LIBRARIES ${AVCODEC_LIBRARIES} ${AVUTIL_LIBRARIES} ${SWSCALE_LIBRARIES})
+      set(H264_LIBRARY_DIRS ${AVCODEC_LIBRARY_DIRS} ${AVUTIL_LIBRARY_DIRS} ${SWSCALE_LIBRARY_DIRS})
+      add_definitions("-D__STDC_CONSTANT_MACROS")
+      add_definitions("-DHAVE_H264")
+      set(H264_LIBS "LIBAV")
+    else()
+      set(H264_LIBS "NONE")
+      message(WARNING "FFMPEG support can't be found")
+    endif()
+  endif()
+  add_definitions("-DH264_${H264_LIBS}")
+endif()
 
-# Headers:
-install(
-    DIRECTORY "include/"
-    DESTINATION "${include_install_dir}"
-    FILES_MATCHING PATTERN "*.h"
-)
+# Check for libjpeg
+find_package(JPEG REQUIRED)
 
-# Config
-#   * <prefix>/lib/cmake/rabit/rabitConfig.cmake
-#   * <prefix>/lib/cmake/rabit/rabitConfigVersion.cmake
-install(
-    FILES "${project_config}" "${version_config}"
-    DESTINATION "${config_install_dir}"
-)
+# Warn if it doesn't seem to be the accelerated libjpeg that's found
+set(CMAKE_REQUIRED_LIBRARIES ${JPEG_LIBRARIES})
+set(CMAKE_REQUIRED_FLAGS -I${JPEG_INCLUDE_DIR})
 
-# Config
-#   * <prefix>/lib/cmake/Foo/FooTargets.cmake
-install(
-    EXPORT "${TARGETS_EXPORT_NAME}"
-    NAMESPACE "${namespace}"
-    DESTINATION "${config_install_dir}"
-)
-# }
+set(JPEG_TEST_SOURCE "\n
+  #include <stdio.h>\n
+  #include <jpeglib.h>\n
+  int main(void) {\n
+    struct jpeg_compress_struct cinfo;\n
+    struct jpeg_error_mgr jerr;\n
+    cinfo.err=jpeg_std_error(&jerr);\n
+    jpeg_create_compress(&cinfo);\n
+    cinfo.input_components = 3;\n
+    jpeg_set_defaults(&cinfo);\n
+    cinfo.in_color_space = JCS_EXT_RGB;\n
+    jpeg_default_colorspace(&cinfo);\n
+    return 0;\n
+  }")
+
+if(CMAKE_CROSSCOMPILING)
+  check_c_source_compiles("${JPEG_TEST_SOURCE}" FOUND_LIBJPEG_TURBO)
+else()
+  check_c_source_runs("${JPEG_TEST_SOURCE}" FOUND_LIBJPEG_TURBO)
+endif()
+
+set(CMAKE_REQUIRED_LIBRARIES)
+set(CMAKE_REQUIRED_FLAGS)
+set(CMAKE_REQUIRED_DEFINITIONS)
+
+if(NOT FOUND_LIBJPEG_TURBO)
+  message(STATUS "WARNING: You are not using libjpeg-turbo. Performance will suffer.")
+endif()
+
+option(BUILD_JAVA "Build Java version of the TigerVNC Viewer" FALSE)
+if(BUILD_JAVA)
+  add_subdirectory(java)
+endif()
+
+option(BUILD_VIEWER "Build TigerVNC viewer" ON)
+if(BUILD_VIEWER)
+  # Check for FLTK
+  set(FLTK_SKIP_FLUID TRUE)
+  set(FLTK_SKIP_OPENGL TRUE)
+  set(FLTK_SKIP_FORMS TRUE)
+  find_package(FLTK REQUIRED)
+  if(UNIX AND NOT APPLE)
+    # No proper handling for extra X11 libs that FLTK might need...
+    if(X11_Xft_FOUND)
+      # Xft headers include references to fontconfig, so we need
+      # to link to that as well
+      find_library(FONTCONFIG_LIB fontconfig)
+      set(FLTK_LIBRARIES ${FLTK_LIBRARIES} ${X11_Xft_LIB} ${FONTCONFIG_LIB})
+    endif()
+    if(X11_Xinerama_FOUND)
+      set(FLTK_LIBRARIES ${FLTK_LIBRARIES} ${X11_Xinerama_LIB})
+    endif()
+    if(X11_Xfixes_FOUND)
+      set(FLTK_LIBRARIES ${FLTK_LIBRARIES} ${X11_Xfixes_LIB})
+    endif()
+    if(X11_Xcursor_FOUND)
+      set(FLTK_LIBRARIES ${FLTK_LIBRARIES} ${X11_Xcursor_LIB})
+    endif()
+    if(X11_Xrender_FOUND)
+      set(FLTK_LIBRARIES ${FLTK_LIBRARIES} ${X11_Xrender_LIB})
+    endif()
+  endif()
+endif()
+
+# Check for GNUTLS library
+option(ENABLE_GNUTLS "Enable protocol encryption and advanced authentication" ON)
+if(ENABLE_GNUTLS)
+  find_package(GnuTLS)
+  if (GNUTLS_FOUND)
+    add_definitions("-DHAVE_GNUTLS")
+  endif()
+endif()
+
+option(ENABLE_NETTLE "Enable RSA-AES security types" ON)
+if (ENABLE_NETTLE)
+  find_package(Nettle)
+  if (NETTLE_FOUND)
+    add_definitions("-DHAVE_NETTLE")
+  endif()
+endif()
+
+# Check for PAM library
+if(UNIX AND NOT APPLE)
+  check_include_files(security/pam_appl.h HAVE_PAM_H)
+  set(CMAKE_REQUIRED_LIBRARIES -lpam)
+  check_function_exists(pam_start HAVE_PAM_START)
+  set(CMAKE_REQUIRED_LIBRARIES)
+  if(HAVE_PAM_H AND HAVE_PAM_START)
+    set(PAM_LIBS pam)
+  else()
+    message(FATAL_ERROR "Could not find PAM development files")
+  endif()
+endif()
+
+# Check for SELinux library
+if(UNIX AND NOT APPLE)
+  check_include_files(selinux/selinux.h HAVE_SELINUX_H)
+  if(HAVE_SELINUX_H)
+    set(CMAKE_REQUIRED_LIBRARIES -lselinux)
+    set(CMAKE_REQUIRED_LIBRARIES)
+    set(SELINUX_LIBS selinux)
+    add_definitions("-DHAVE_SELINUX")
+  else()
+    message(WARNING "Could not find SELinux development files")
+  endif()
+endif()
+
+# check for systemd support (socket activation)
+if(UNIX AND NOT APPLE)
+  find_package(PkgConfig)
+  if (PKG_CONFIG_FOUND)
+    pkg_check_modules(LIBSYSTEMD libsystemd)
+    if (LIBSYSTEMD_FOUND)
+      add_definitions(-DHAVE_LIBSYSTEMD)
+    endif()
+  endif()
+endif()
+
+# Generate config.h and make sure the source finds it
+configure_file(config.h.in config.h)
+add_definitions(-DHAVE_CONFIG_H)
+include_directories(${CMAKE_BINARY_DIR})
+
+include(cmake/StaticBuild.cmake)
+
+add_subdirectory(common)
+
+if(WIN32)
+  add_subdirectory(win)
+else()
+  # No interest in building x related parts on Apple
+  if(NOT APPLE)
+    add_subdirectory(unix)
+  endif()
+endif()
+
+if(ENABLE_NLS)
+  add_subdirectory(po)
+endif()
+
+if(BUILD_VIEWER)
+  add_subdirectory(vncviewer)
+  add_subdirectory(media)
+endif()
+
+add_subdirectory(tests)
+
+
+if(BUILD_VIEWER)
+  add_subdirectory(release)
+endif()
+
+# uninstall
+configure_file("${CMAKE_SOURCE_DIR}/cmake/cmake_uninstall.cmake.in"
+  "cmake_uninstall.cmake" IMMEDIATE @ONLY)
+
+add_custom_target(uninstall COMMAND ${CMAKE_COMMAND} -P cmake_uninstall.cmake)
+
+libtool_generate_control_files()

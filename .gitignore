@@ -1,52 +1,15 @@
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-*.lnk
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-
-# Compiled Static libraries
-*.lai
+*.[ao]
+*.mo
 *.la
-*.a
-*.lib
+*.lo
+.deps
+.libs
 
-# Executables
-*.miss
-*.exe
-*.out
-*.app
-*~
-*.pyc
-*.mpi
-*.exe
-*tmp*
-*.rabit
-*.mock
-recommonmark
-recom
-_*
-
-#mpi lib
-mpich/
-mpich-3.2/
-
-# Jetbrain
-.idea
-cmake-build-debug/
-.vscode/
-
-# cmake
-build/
-compile_commands.json
+CMakeFiles
+CMakeCache.txt
+Makefile
+Makefile.in
+config.h
+cmake_install.cmake
+cmake_uninstall.cmake
+install_manifest.txt
