@@ -1,105 +1,15 @@
-# News
+# colab
+各种牛逼项目的Colab脚本集合！
 
-https://docs.robinhood.com/crypto/trading/
-
-I'm feeling in a mood to work on this again. I'll be trying to fill any blanks found in Robinhood's official docs. First, I'll be talking to myself over in https://github.com/sanko/Robinhood/discussions while I work through v1 of their crypto API and later documenting rough edges in these docs.
-
--------
-
-# Unofficial Documentation of Robinhood Trade's Private API
-
-Table of Contents:
-
-- [Table of Contents](#table-of-contents)
-- [Introduction](#introduction)
-	- [Development](#development)
-- [API Security](#api-security)
-- [API Error Reporting](#api-error-reporting)
-- [Pagination](#pagination)
-	- [Semi-Pagination](#semi-pagination)
-
-## See also
-
-- [Authentication.md](Authentication.md) for methods related to user authentication, password recovery, etc.
-- [Banking.md](Banking.md) for bank accounts & ACH transfers methods
-- [Order.md](Order.md) for order-related functions (placing, cancelling, listing previous orders, etc.)
-- [Options.md](Options.md) for options related endpoints
-- [Quote.md](Quote.md) for stock quotes
-- [Fundamentals.md](Fundamentals.md) for basic, fundamental data
-- [Instrument.md](Instrument.md) for internal reference to financial instruments
-- [Watchlist.md](Watchlist.md) for watchlists management
-- [Account.md](Account.md) talks about gathering and modifying user and account information
-- [Settings.md](Settings.md) covers notifications and other settings
-- [Markets.md](Markets.md) describes the API for getting basic info about specific exchanges themselves
-- [Referrals.md](Referrals.md) is all about account referrals
-- [Statistics.md](Statistics.md) exposes the new social/statistical endpoints
-- [Tags.md](Tags.md) exposes the new categorizing endpoints
-
-Things I have yet to organize are in [Unsorted.md](Unsorted.md)
-
-# Introduction
-
-[Robinhood](http://robinhood.com/) is a commission-free, online securities brokerage. As you would expect, being an online service means everything is handled through a request that is made to a specific URL.
-
-# API Security
-
-The HTTPS protocol is used to access the Robinhood API. Transactions require security because most calls transmit actual account informaion. SSL Pinning is used in the official Android and iOS apps to prevent MITM attacks; you would be wise to do the same at the very least.
-
-Calls to API endpoints make use of two different levels of authentication:
-
-1. **None**: No authentication. Anyone can query the method.
-2. **Token**: Requires an authorization token generated with a call to [log in](Authentication.md#logging-in).
-
-Calls which require no authentication are generally informational ([quote gathering](Quote.md#quote-methods), [securities lookup](#instrument-methods), etc.).
-
-Authorized calls require an `Authorization` HTTP Header with the authentication type set as `Token` (Example: `Authorization: Token 40charauthozationtokenherexxxxxxxxxxxxxx`).
-
-# API Error Reporting
-
-The API reports incorrect data or improper use with HTTP status codes and JSON objects returned as body content. Some that I've run into include:
-
-| HTTP Status | Key                | Value | What I Did Wrong |
-|-------------|--------------------|-------|------------------|
-| 400         | `non_field_errors` | `["Unable to log in with provided credentials."]` | Attempted to [log in](#logging-in) with incorrect username/password |
-| 400         | `password`         | `["This field may not be blank."]`                | Attempted to [log in](#logging-in) without a password |
-| 401         | `detail`           | `["Invalid token."]`                              | Attempted to use cached token after [logging out](#logging-out) |
-| 400         | `password`           | `["This password is too short. It must contain at least 10 characters.", "This password is too common."]`                                                       | Attempted to [change my password](#password-reset) to `password` |
-
-...you get the idea. Letting you know exactly what went wrong makes the API almost self-documenting so thanks Robinhood.
-
-# Pagination
-
-Some data is returned from the Robinhood API as paginated data with `next` and `previous` cursors already in URL form.
-
-If your call returns paginated data, it will look like this call to `https://api.robinhood.com/instruments/`:
-
-```
-{
-    "previous": null,
-    "results": [{
-        "splits" : "https://api.robinhood.com/instruments/42e07e3a-ca7a-4abc-8c23-de49cb657c62/splits/",
-        "margin_initial_ratio" : "1.0000",
-        "url" : "https://api.robinhood.com/instruments/42e07e3a-ca7a-4abc-8c23-de49cb657c62/",
-        "quote" : "https://api.robinhood.com/quotes/SBPH/",
-        "symbol" : "SBPH",
-        "bloomberg_unique" : "EQ0000000028928752",
-        "list_date" : null,
-        "fundamentals" : "https://api.robinhood.com/fundamentals/SBPH/",
-        "state" : "active",
-        "tradeable" : true,
-        "maintenance_ratio" : "1.0000",
-        "id" : "42e07e3a-ca7a-4abc-8c23-de49cb657c62",
-        "market" : "https://api.robinhood.com/markets/XNAS/",
-        "name" : "Spring Bank Pharmaceuticals, Inc. Common Stock"
-    },
-        ...
-    ],
-    "next": "https://api.robinhood.com/instruments/?cursor=cD04NjUz"
-}
-```
-
-To get the next page of results, just use the `next` URL.
-
-## Semi-Pagination
-
-Some data is returned as a list of `results` as if they were paginate but the API doesn't supply us with `previous` or `next` keys.
+| 名称  |脚本   | 描述 |
+| ---- | ---- | ---- |
+| [ChatTTS](https://github.com/2noise/ChatTTS) | [![打开](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dream80/TonyColab/blob/master/ChatTTS.ipynb) |专为对话场景设计的文本转语音模型,情感丰富，自然逼真|
+| [Gemma](https://Github.com/google/gemma_pytorch) | [![打开](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dream80/TonyColab/blob/master/backup/pytorch_gemma.ipynb) |谷歌开源的大语言模型Gemma|
+| [InstantID](https://github.com/InstantID/InstantID) | [![打开](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dream80/TonyColab/blob/master/InstantID.ipynb) |1张照片，无需训练，秒级生成个人写真|
+| [PhotoMaker](https://github.com/TencentARC/PhotoMaker) | [![打开](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dream80/TonyColab/blob/master/PhotoMaker.ipynb) | 通过堆叠 ID 嵌入定制逼真的人体照片 |
+| Sambert_UI | [![打开](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dream80/TonyColab/blob/master/backup/Sambert_UI.ipynb) | 基于Sambert的声音克隆 |
+| MyHeyGen | [![打开](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dream80/TonyColab/blob/master/myheygen.ipynb) | HeyGen平替，声音克隆，嘴型同步，视频翻译。 |
+| [magic-animate](https://github.com/magic-research/magic-animate) | [![打开](https://colab.research.google.com/assets/colab-badge.svg)](myheygen.ipynb) | 照片跳舞，视频驱动图片。 |
+| [vid2densepose](https://github.com/Flode-Labs/vid2densepose) | [![打开](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dream80/TonyColab/blob/master/backup/Vid2Densepose.ipynb) | 视频转姿态，配合[magic-animate](https://github.com/magic-research/magic-animate) |
+| Roop | [![打开](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dream80/roop_colab/blob/main/roop_v1_3.ipynb) | AI换脸，单图视频换脸 |
+| FaceFusion | [![打开](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dream80/roop_colab/blob/main/tonyff_v2.1.2.ipynb) | AI换脸，单图视频换脸WEBUI |
